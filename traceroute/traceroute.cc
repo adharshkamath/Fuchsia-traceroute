@@ -31,7 +31,6 @@ typedef struct {
 struct Options {
   long interval_msec = 1000;
   long payload_size_bytes = 0;
-  long count = 3;
   long timeout_msec = 1000;
   const char* host = nullptr;
   long min_payload_size_bytes = 0;
@@ -42,7 +41,6 @@ struct Options {
   }
 
   void Print() const {
-    printf("Count: %ld, ", count);
     printf("Payload size: %ld bytes, ", payload_size_bytes);
     printf("Interval: %ld ms, ", interval_msec);
     printf("Timeout: %ld ms, ", timeout_msec);
@@ -67,11 +65,6 @@ struct Options {
       return false;
     }
 
-    if (count <= 0) {
-      fprintf(stderr, "count must be positive: %ld\n", count);
-      return false;
-    }
-
     if (timeout_msec <= 0) {
       fprintf(stderr, "timeout must be positive: %ld\n", timeout_msec);
       return false;
@@ -88,7 +81,6 @@ struct Options {
     fprintf(stderr, "\n\tUsage: traceroute [ <option>* ] destination\n");
     fprintf(stderr, "\n\tSend ICMP ECHO_REQUEST to a destination. This destination\n");
     fprintf(stderr, "\tmay be a hostname (google.com) or an IP address (8.8.8.8).\n\n");
-    fprintf(stderr, "\t-c count: Only send count packets (default = 3)\n");
     fprintf(stderr, "\t-i interval(ms): Time interval between traceroutes (default = 1000)\n");
     fprintf(stderr, "\t-t timeout(ms): Timeout waiting for traceroute response (default = 1000)\n");
     fprintf(stderr, "\t-s size(bytes): Number of payload bytes (default = %ld, max 1400)\n",
@@ -115,13 +107,6 @@ struct Options {
           payload_size_bytes = strtol(optarg, &endptr, 10);
           if (*endptr != '\0') {
             fprintf(stderr, "-s must be followed by a non-negative integer\n");
-            return Usage();
-          }
-          break;
-        case 'c':
-          count = strtol(optarg, &endptr, 10);
-          if (*endptr != '\0') {
-            fprintf(stderr, "-c must be followed by a non-negative integer\n");
             return Usage();
           }
           break;
@@ -165,7 +150,7 @@ struct tracerouteStatistics {
 
   void Print() const {
     if (num_sent == 0) {
-      printf("No echo request sent\n");
+      printf("No probe sent\n");
       return;
     }
     printf("RTT Min/Max/Avg = [ %.3f / %.3f / %.3f ] ms\n", USEC_TO_MSEC(min_rtt_usec),
@@ -262,7 +247,7 @@ int main(int argc, char** argv) {
       return -1;
     }
     if(setsockopt(s, IPPROTO_IP, IP_TTL, (char*)(&ttl), sizeof(ttl)) < 0) {
-      fprintf(stderr, "traceroute: Could not change TTL\n");
+      fprintf(stderr, "traceroute: Could not change TTL: %s\n", stderror(errno));
       return -1;
     }
     sent_packet_size = sizeof(packet.hdr) + options.payload_size_bytes;
@@ -295,6 +280,10 @@ int main(int argc, char** argv) {
         __FALLTHROUGH;
       default:
         r = -1;
+    }
+    if (r < 0) {
+      fprintf(stderr, "traceroute: Could not read result\n");
+      return -1;
     }
     zx_ticks_t after = zx_ticks_get();
     uint64_t usec = (after - before) / ticks_per_usec;
